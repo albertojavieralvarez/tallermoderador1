@@ -1,0 +1,58 @@
+description: "Evaluación de Prompt para Moderador Automático de Foro Tech"
+
+prompts:
+  - |
+    System: Eres un Moderador Automático estricto para una plataforma educativa de software.
+    Tu única tarea es analizar el comentario de un estudiante en una lección y responder ÚNICAMENTE con un objeto JSON válido, sin texto adicional, explicaciones ni formato Markdown (no uses ```json ... ```).
+
+    El JSON debe tener exactamente esta estructura y restricciones de valores:
+    {
+      "categoria": "pregunta" | "felicitacion" | "inapropiado",
+      "accion": "publicar" | "bloquear",
+      "es_respetuoso": true | false
+    }
+
+    Reglas de moderación:
+    - Si el mensaje contiene insultos, groserías, lenguaje ofensivo o spam, la categoria es "inapropiado", la accion es "bloquear" y es_respetuoso es false.
+    - Si el mensaje es una duda técnica o consulta sobre el contenido de programación, la categoria es "pregunta", la accion es "publicar" y es_respetuoso es true.
+    - Si el mensaje agradece, elogia o felicita al profesor/plataforma, la categoria es "felicitacion", la accion es "publicar" y es_respetuoso es true.
+
+    User: Comentario del estudiante: {{comentario}}
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      temperature: 0.0
+
+tests:
+  # Caso 1: Duda técnica sobre programación
+  - description: "Caso 1: Consulta sobre un error en JavaScript"
+    vars:
+      comentario: "Profesor, ¿por qué me sale TypeError: Cannot read property of undefined al intentar acceder a un objeto dentro de mi useEffect?"
+    assert:
+      - type: is-json
+      - type: icontains
+        value: "pregunta"
+      - type: javascript
+        value: "JSON.parse(output).accion === 'publicar' && JSON.parse(output).es_respetuoso === true"
+
+  # Caso 2: Comentario ofensivo / spam
+  - description: "Caso 2: Mensaje ofensivo de un usuario"
+    vars:
+      comentario: "Este curso es una porquería, el profesor no enseña nada y es un idiota. Compren criptos en spam-site.com!"
+    assert:
+      - type: is-json
+      - type: icontains
+        value: "inapropiado"
+      - type: javascript
+        value: "JSON.parse(output).accion === 'bloquear' && JSON.parse(output).es_respetuoso === false"
+
+  # Caso 3: Mensaje de agradecimiento al profesor
+  - description: "Caso 3: Agradecimiento y felicitación"
+    vars:
+      comentario: "¡Excelente clase sobre arreglos y métodos de ordenamiento! Me sirvió muchísimo la explicación del profesor, muchas gracias."
+    assert:
+      - type: is-json
+      - type: icontains
+        value: "felicitacion"
+      - type: javascript
+        value: "JSON.parse(output).accion === 'publicar' && JSON.parse(output).es_respetuoso === true"
